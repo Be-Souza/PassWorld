@@ -33,7 +33,8 @@ cursor.execute('''
     CREATE TABLE IF NOT EXISTS usuarios (
         id INTEGER PRIMARY KEY,
         user TEXT NOT NULL,
-        senha TEXT NOT NULL
+        senha TEXT NOT NULL,
+        chave TEXT NOT NULL
     )
     ''')
 
@@ -41,31 +42,40 @@ conn.commit()
 
 conn.close()
 
-def carregarChaveDoBanco():
+def carregarChaveDoBanco(usuario):
     conn = sqlite3.connect('passworld.db')
     cursor = conn.cursor()
-    cursor.execute("SELECT chave FROM chaves ORDER BY id DESC LIMIT 1")
+    cursor.execute("SELECT chave FROM usuarios WHERE user=? ORDER BY id DESC LIMIT 1", (usuario,))
+    chave = cursor.fetchone()
+    conn.close()
+    return chave[0] if chave else None
+
+def carregarChaveDoBancoLoginApp():
+    conn = sqlite3.connect('passworld.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT chave FROM chaves ORDER BY id DESC LIMIT 1", )
     chave = cursor.fetchone()
     conn.close()
     return chave[0] if chave else None
 
 # Tentar carregar a chave do banco de dados
-chave = carregarChaveDoBanco()
+chaveLoginApp = carregarChaveDoBancoLoginApp()
 
 # Se a chave não foi encontrada no banco de dados, gerar uma nova chave
-if chave is None:
+if chaveLoginApp is None:
     print("Chave Fernet não encontrada no banco de dados. Gerando uma nova chave...")
-    chave = Fernet.generate_key()
+    chaveLoginApp = Fernet.generate_key()
     
     # Inserir a nova chave no banco de dados
     conn = sqlite3.connect('passworld.db')
     cursor = conn.cursor()
-    cursor.execute("INSERT INTO chaves (chave) VALUES (?)", (chave,))
+    cursor.execute("INSERT INTO chaves (chave) VALUES (?)", (chaveLoginApp,))
     conn.commit()
     conn.close()
 
 # Inicializar o objeto Fernet com a chave carregada
-chaveFernet = Fernet(chave)
+chaveFernetLoginApp = Fernet(chaveLoginApp)
+
 
 # Gerar uma chave de criptografia
 def gerar_chave():
@@ -96,21 +106,6 @@ def criptografar_senha(fernet, senha):
 def descriptografar_senha(fernet, senha_criptografada):
     return fernet.decrypt(senha_criptografada).decode()
 
-def inserirChaveNoBanco(chave):
-    conn = sqlite3.connect('passworld.db')
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO chaves (chave) VALUES (?)", (chave,))
-    conn.commit()
-    conn.close()
-
-def recuperarChaveDoBanco():
-    conn = sqlite3.connect('passworld.db')
-    cursor = conn.cursor()
-    cursor.execute("SELECT chave FROM chaves ORDER BY id DESC LIMIT 1")
-    chave = cursor.fetchone()
-    conn.close()
-    return chave[0] if chave else None
-
 ####FIM CHAVE CRIPTOGRAFIA BANCO DE DADOS-----------------------------------------------------------------------------------------------
 
 def verificarUsuarioExistente(usuario):
@@ -126,25 +121,23 @@ def verificarUsuarioExistente(usuario):
     
     return False
 
-def criarUsuario(fernet):
+def criarUsuario():
     
     limparTerminal()
-    print("Bem vindo ao menu de criação de usuário!\n")
 
-    # Conectar ao banco de dados SQLite
+    chave = None
+
+    # Se a chave não foi encontrada no banco de dados, gerar uma nova chave
+    if chave is None:
+        
+        chave = Fernet.generate_key()
+
+        print("Bem vindo ao menu de criação de usuário!")
+        print("Gerando uma nova chave...")
+        time.sleep(1)
+        print("Sua nova chave de criptografia única foi gerada com sucesso!\n")
     conn = sqlite3.connect('passworld.db')
-
-    # Criar um cursor para executar comandos SQL
     cursor = conn.cursor()
-
-    # Criar uma tabela
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS usuarios (
-        id INTEGER PRIMARY KEY,
-        user TEXT NOT NULL,
-        senha TEXT NOT NULL
-    )
-    ''')
 
     while True:
         user = input("Insira o nome de usuário a ser criado: ")
@@ -155,20 +148,24 @@ def criarUsuario(fernet):
     
     senha = input("Insira a senha do usuário:")
 
-    guardarInfo = 'INSERT INTO usuarios (user, senha) VALUES (?, ?)'
+    guardarInfo = 'INSERT INTO usuarios (user, senha, chave) VALUES (?, ?, ?)'
 
-    senhaAppCript = criptografar_senha(fernet, senha)
+    senhaAppCript = criptografar_senha(chaveFernetLoginApp, senha)
 
-    cursor.execute(guardarInfo,(user, senhaAppCript))
+    cursor.execute(guardarInfo,(user, senhaAppCript, chave))    
+
+
 
     conn.commit()
     conn.close()
+    limparTerminal()
 
 def limparTerminal():
     os.system('cls' if os.name == 'nt' else 'clear')
 
-def login(fernet):
-
+def login():
+    global chaveFernet
+    chaveFernet = None
     limparTerminal()
     usuarioEntrou = False
 
@@ -184,14 +181,16 @@ def login(fernet):
         cursor.execute('SELECT id FROM usuarios WHERE user= ?', (userGerenciador,))
         global idUsuario
         id_usuario = cursor.fetchone()
+        
+        cursor.execute('SELECT chave FROM usuarios WHERE user=?', (userGerenciador,))
+        chaveFernetBytes = cursor.fetchone()[0]
+        chaveFernet = Fernet(chaveFernetBytes)
 
     if id_usuario:
         idUsuario = id_usuario[0]
-        print(f"O id do usuario é: {idUsuario}")
+
     else:
         print("Usuário não encontrado.")
-
-        print(f"O id do usuario é: {idUsuario}")
 
         if usuarioEntrou:
             print("Inicializando...")
@@ -221,7 +220,7 @@ def verificarCredenciais(usuario, senha):
 
         # Se a senha não estiver vazia, descriptografa e compara com a senha digitada
         if senhaDoBanco:
-            senhaDecript = descriptografar_senha(chaveFernet, senhaDoBanco)
+            senhaDecript = descriptografar_senha(chaveFernetLoginApp, senhaDoBanco)
 
             if senhaDecript == senha:
                 limparTerminal()
@@ -251,8 +250,6 @@ def printaTela():
     print("5. Trocar/Criar Usuário")
     print("6. Sair")
 
-####COMEÇO OFICIAL DO PROGRAMA-------------------------------------------------------------------------------------
-
 def telaInicial():
     logou = False
 
@@ -265,17 +262,17 @@ def telaInicial():
 
         if temUserLoginCriado[0] > 0:
             print("Bem vindo ao PassWorld!\n")
-            print("O que você deseja fazer?\n")
-            print("------------------------\n")
+            print("O que você deseja fazer?")
+            print("------------------------")
             print("1. Entrar no PassWorld")
             print("2. Criar uma conta PassWorld")
             escolhaTelaInicial = input("\nDigite o número referente a opção desejada: ")
 
             if escolhaTelaInicial == '1':
-                login(chaveFernet)
+                login()
                 logou = True
             elif escolhaTelaInicial == '2':
-                criarUsuario(chaveFernet)
+                criarUsuario()
             else:
                 limparTerminal()
                 print("Opção inválida digitada, tente novamente.")
@@ -283,8 +280,8 @@ def telaInicial():
         else:
             print("Seja bem vindo ao PassWorld!")
             print("Você será redirecionado para o menu de criação de contas em breve")
-            time.sleep(2)
-            criarUsuario(chaveFernet)
+            time.sleep(1.5)
+            criarUsuario()
 
 
 
@@ -294,6 +291,7 @@ usandoPrograma = True
 
 def insereSenha(fernet, id_usuario):
     limparTerminal()
+
     conn = sqlite3.connect('passworld.db')
     cursor = conn.cursor()
     criar_tabela(cursor)
