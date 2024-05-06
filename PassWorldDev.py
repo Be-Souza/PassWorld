@@ -129,11 +129,13 @@ def criarUsuario():
 
     # Se a chave não foi encontrada no banco de dados, gerar uma nova chave
     if chave is None:
-        print("Gerando uma nova chave...")
+        
         chave = Fernet.generate_key()
 
-        print("Bem vindo ao menu de criação de usuário!\n")
-
+        print("Bem vindo ao menu de criação de usuário!")
+        print("Gerando uma nova chave...")
+        time.sleep(1)
+        print("Sua nova chave de criptografia única foi gerada com sucesso!\n")
     conn = sqlite3.connect('passworld.db')
     cursor = conn.cursor()
 
@@ -156,12 +158,14 @@ def criarUsuario():
 
     conn.commit()
     conn.close()
+    limparTerminal()
 
 def limparTerminal():
     os.system('cls' if os.name == 'nt' else 'clear')
 
 def login():
     global chaveFernet
+    chaveFernet = None
     limparTerminal()
     usuarioEntrou = False
 
@@ -181,16 +185,12 @@ def login():
         cursor.execute('SELECT chave FROM usuarios WHERE user=?', (userGerenciador,))
         chaveFernetBytes = cursor.fetchone()[0]
         chaveFernet = Fernet(chaveFernetBytes)
-        print(f"{chaveFernet}")
-        time.sleep(5)
 
     if id_usuario:
         idUsuario = id_usuario[0]
-        print(f"O id do usuario é: {idUsuario}")
+
     else:
         print("Usuário não encontrado.")
-
-        print(f"O id do usuario é: {idUsuario}")
 
         if usuarioEntrou:
             print("Inicializando...")
@@ -250,8 +250,6 @@ def printaTela():
     print("5. Trocar/Criar Usuário")
     print("6. Sair")
 
-####COMEÇO OFICIAL DO PROGRAMA-------------------------------------------------------------------------------------
-
 def telaInicial():
     logou = False
 
@@ -264,8 +262,8 @@ def telaInicial():
 
         if temUserLoginCriado[0] > 0:
             print("Bem vindo ao PassWorld!\n")
-            print("O que você deseja fazer?\n")
-            print("------------------------\n")
+            print("O que você deseja fazer?")
+            print("------------------------")
             print("1. Entrar no PassWorld")
             print("2. Criar uma conta PassWorld")
             escolhaTelaInicial = input("\nDigite o número referente a opção desejada: ")
@@ -282,7 +280,7 @@ def telaInicial():
         else:
             print("Seja bem vindo ao PassWorld!")
             print("Você será redirecionado para o menu de criação de contas em breve")
-            time.sleep(2)
+            time.sleep(1.5)
             criarUsuario()
 
 
